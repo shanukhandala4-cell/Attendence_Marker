@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mark Attendance — {{ data.current_tab }} ({{ selected_date }})</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="dark"] {
+            --page-bg: #0b1120;
+            --nav-bg: #111827;
+            --card-bg: #161f33;
+            --card-border: #26324d;
+            --text-main: #ffffff;
+            --text-muted: #cbd5e1;
+            --row-hover: rgba(99, 102, 241, 0.14);
+            --row-present: rgba(16, 185, 129, 0.18);
+            --badge-absent-bg: #334155;
+            --badge-absent-text: #f8fafc;
+        }
+        :root[data-theme="light"] {
+            --page-bg: #f1f5f9;
+            --nav-bg: #ffffff;
+            --card-bg: #ffffff;
+            --card-border: #cbd5e1;
+            --text-main: #0f172a;
+            --text-muted: #334155;
+            --row-hover: rgba(99, 102, 241, 0.06);
+            --row-present: rgba(16, 185, 129, 0.14);
+            --badge-absent-bg: #e2e8f0;
+            --badge-absent-text: #1e293b;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--page-bg);
+            min-height: 100vh;
+            color: var(--text-main);
+            transition: all 0.25s ease;
+        }
+        .top-nav {
+            background: var(--nav-bg);
+            border-bottom: 1px solid var(--card-border);
+        }
+        .surface-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+        }
+        .student-mark-row {
+            cursor: pointer;
+            transition: background 0.15s ease;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .student-mark-row:hover {
+            background: var(--row-hover);
+        }
+        .student-mark-row.is-present {
+            background: var(--row-present);
+        }
+        .badge-absent-pill {
+            background: var(--badge-absent-bg);
+            color: var(--badge-absent-text);
+            font-weight: 700;
+        }
+        .att-checkbox {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #10b981;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar top-nav px-4 py-3 sticky-top">
+    <div class="container-fluid" style="max-width: 1100px;">
+        <a href="/sheet/{{ sheet_id }}?tab={{ data.current_tab }}" class="btn btn-sm rounded-pill px-3 fw-semibold" style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--card-border);">
+            <i class="bi bi-x-lg me-1"></i> Cancel
+        </a>
+        <div class="text-center">
+            <span class="fw-bold" style="color: var(--text-main);">{{ data.subject }} ({{ data.current_tab }})</span>
+            <span class="badge bg-primary text-white ms-2 px-3 py-1 rounded-pill">
+                <i class="bi bi-calendar-event me-1"></i>{{ selected_date }}
+            </span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm rounded-pill px-3 fw-semibold" style="background: var(--card-bg); color: var(--text-main); border: 1px solid var(--card-border);" onclick="toggleTheme()" id="themeBtn">
+                <i class="bi bi-sun-fill text-warning"></i>
+            </button>
+            <span class="badge bg-success text-white px-3 py-2 rounded-pill fw-semibold">
+                Present: <strong id="presentCounter">0</strong> / {{ data.students | length }}
+            </span>
+        </div>
+    </div>
+</nav>
+
+<div class="container my-4" style="max-width: 1000px;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} rounded-4 border-0 fw-medium">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST">
+        <input type="hidden" name="tab" value="{{ data.current_tab }}">
+        <input type="hidden" name="selected_date" value="{{ selected_date }}">
+        <input type="hidden" name="col_num" value="{{ target_col_num }}">
+
+        <!-- Quick Action Toolbar -->
+        <div class="surface-card p-3 mb-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" id="markAllBtn" class="btn btn-outline-success btn-sm rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-check-all me-1"></i>Mark All Present
+                </button>
+                <button type="button" id="clearAllBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-eraser me-1"></i>Clear All
+                </button>
+                <button type="button" id="copyLastBtn" class="btn btn-outline-info btn-sm rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-files me-1"></i>Copy Last Class ({{ data.last_class_date }})
+                </button>
+            </div>
+
+            <button type="submit" class="btn btn-success fw-bold rounded-pill px-4 py-2 shadow">
+                <i class="bi bi-cloud-upload me-1"></i> Save to Google Sheet
+            </button>
+        </div>
+
+        <!-- Marking Roster -->
+        <div class="surface-card overflow-hidden">
+            <div class="p-3 d-flex justify-content-between small fw-bold text-uppercase" style="color: var(--text-muted); border-bottom: 1px solid var(--card-border);">
+                <span>Student Roster (Tap any row to toggle)</span>
+                <span>Attendance Status</span>
+            </div>
+
+            {% for st in data.students %}
+            {% set is_checked = st.attendance_map.get(selected_date) %}
+            <div class="student-mark-row p-3 px-4 d-flex justify-content-between align-items-center {{ 'is-present' if is_checked else '' }}"
+                 onclick="toggleRow(this)">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-primary text-white px-2 py-1 fw-semibold">
+                        {{ st.enroll_no }}
+                    </span>
+                    <div>
+                        <div class="fw-bold" style="color: var(--text-main);">{{ st.name }}</div>
+                        <small style="color: var(--text-muted);">
+                            Overall: {{ st.percentage }}% • Last Class: 
+                            <span class="fw-bold {{ 'text-success' if st.last_status == 'Present' else 'text-danger' }}">
+                                {{ st.last_status }}
+                            </span>
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-3" onclick="event.stopPropagation();">
+                    <span class="status-label badge {{ 'bg-success text-white' if is_checked else 'badge-absent-pill' }} rounded-pill px-3 py-1">
+                        {{ 'Present (1)' if is_checked else 'Absent' }}
+                    </span>
+                    <input type="hidden" name="all_rows" value="{{ st.row_num }}">
+                    <input type="checkbox" name="present_rows" value="{{ st.row_num }}" 
+                           class="form-check-input att-checkbox"
+                           data-last="{{ '1' if st.last_status == 'Present' else '0' }}"
+                           onchange="syncRowStyle(this)"
+                           {{ 'checked' if is_checked else '' }}>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="text-end mt-4 mb-5">
+            <button type="submit" class="btn btn-success btn-lg fw-bold rounded-pill px-5 shadow">
+                <i class="bi bi-check2-circle me-2"></i>Confirm & Save Attendance
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('attendx_theme', theme);
+        const btn = document.getElementById('themeBtn');
+        btn.innerHTML = theme === 'dark'
+            ? '<i class="bi bi-sun-fill text-warning me-1"></i> Light'
+            : '<i class="bi bi-moon-stars-fill text-primary me-1"></i> Dark';
+    }
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+    }
+    applyTheme(localStorage.getItem('attendx_theme') || 'dark');
+
+    function updateCounter() {
+        const totalChecked = document.querySelectorAll('.att-checkbox:checked').length;
+        document.getElementById('presentCounter').textContent = totalChecked;
+    }
+
+    function syncRowStyle(cb) {
+        const row = cb.closest('.student-mark-row');
+        const label = row.querySelector('.status-label');
+        if (cb.checked) {
+            row.classList.add('is-present');
+            label.className = 'status-label badge bg-success text-white rounded-pill px-3 py-1';
+            label.textContent = 'Present (1)';
+        } else {
+            row.classList.remove('is-present');
+            label.className = 'status-label badge badge-absent-pill rounded-pill px-3 py-1';
+            label.textContent = 'Absent';
+        }
+        updateCounter();
+    }
+
+    function toggleRow(rowDiv) {
+        const cb = rowDiv.querySelector('.att-checkbox');
+        cb.checked = !cb.checked;
+        syncRowStyle(cb);
+    }
+
+    document.getElementById('markAllBtn').addEventListener('click', () => {
+        document.querySelectorAll('.att-checkbox').forEach(cb => { cb.checked = true; syncRowStyle(cb); });
+    });
+
+    document.getElementById('clearAllBtn').addEventListener('click', () => {
+        document.querySelectorAll('.att-checkbox').forEach(cb => { cb.checked = false; syncRowStyle(cb); });
+    });
+
+    document.getElementById('copyLastBtn').addEventListener('click', () => {
+        document.querySelectorAll('.att-checkbox').forEach(cb => {
+            cb.checked = (cb.dataset.last === '1');
+            syncRowStyle(cb);
+        });
+    });
+
+    updateCounter();
+</script>
+</body>
+</html>
