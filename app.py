@@ -3,11 +3,10 @@ import json
 from datetime import datetime
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Localhost HTTP testing ke liye; live HTTPS server par automatic disable rahega
 if os.environ.get('RENDER') is None and os.environ.get('FLASK_ENV') != 'production':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-from flask import Flask, redirect, url_for, session, request, render_template, flash
+from flask import Flask, redirect, url_for, session, request, render_template, flash, Response
 from flask_sqlalchemy import SQLAlchemy
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
@@ -22,7 +21,6 @@ from sheet_parser import (
 )
 
 app = Flask(__name__)
-# Cloud proxy (Render/Railway) par HTTPS redirect URI sahi detect karne ke liye
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-local-secret-key-attendx')
@@ -40,8 +38,18 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.metadata.readonly'
 ]
 
+FAVICON_SVG = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#2563eb"/>
+  <rect x="14" y="14" width="15" height="36" rx="4" fill="#ffffff"/>
+  <rect x="35" y="14" width="15" height="16" rx="4" fill="#ffffff"/>
+  <rect x="35" y="34" width="15" height="16" rx="4" fill="#93c5fd"/>
+</svg>'''
+
+@app.route('/favicon.ico')
+def favicon():
+    return Response(FAVICON_SVG, mimetype='image/svg+xml')
+
 def create_oauth_flow(state=None):
-    """Local file ya Cloud Environment Variable se Google OAuth Flow banata hai."""
     redirect_uri = url_for('callback', _external=True)
     env_secret = os.environ.get('GOOGLE_CLIENT_SECRET_JSON')
     if env_secret:
